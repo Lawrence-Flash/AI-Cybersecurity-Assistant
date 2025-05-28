@@ -3,6 +3,8 @@ import pyttsx3
 import subprocess
 import shutil
 import re
+import ipaddress
+
 
 #initialization of a global objects for efficiency
 engine = pyttsx3.init()
@@ -17,6 +19,7 @@ def speak(text):
     engine.runAndWait()
 
 def listen(max_attempts=3):
+    global input_mode
     """Handles both voice and text input based on user preferences"""
     if input_mode == "text":
         command = input("Enter your command: ")
@@ -26,16 +29,21 @@ def listen(max_attempts=3):
     # voice input mode
     attempts = 0
     while attempts < max_attempts:
-        with sr.Microphone() as source:
-            print("Listening...")
-            recognizer.adjust_for_ambient_noise(source)
-            audio = recognizer.listen(source)
         try:
+            with sr.Microphone() as source:
+                print("Listening...")
+                recognizer.adjust_for_ambient_noise(source)
+                audio = recognizer.listen(source)
             command = recognizer.recognize_google(audio)
             print(f"You said: {command}")
             return command
+        except OSError:
+            print("No microphione found. please chaeck your microphone connection.")
+            speak("No microphone found.Please chack your microphone connection.")
+            input_mode = "text"
+            return listen()
         except sr.UnknownValueError:
-            print("Sorry, I couldn't unserstand.")
+            print("Sorry, I couldn't understand.")
             attempts += 1
         except sr.RequestError:
             print("Could not connect to speech recognition service.")
@@ -47,9 +55,14 @@ def listen(max_attempts=3):
 
 def is_valid_target(target):
     """Validates IP or Domain"""
-    ip_pattern = r"^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$"
-    domain_pattern = r"[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$"
-    return re.match(ip_pattern, target) or re.match(domain_pattern, target)
+    #using a strong/stricter rgex patterm for IP validation
+    try:
+        #chaeck if the target is a valid IP address
+        ipaddress.ip_address(target)
+        return True
+    except ValueError:
+        domain_pattern = r"[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$"
+        return re.match(domain_pattern, target)
 
 def check_nmap():
     #check if Nmap is installed
@@ -66,7 +79,7 @@ def run_nmap_scan(target):
         return
     try:
         speak(f"Scanning {target} with Nmap...")
-        result = subprocess.run(["nmap", "-F", target], capture_output=True, text=True)
+        result = subprocess.run(["nmap", "-F", target], capture_output=True, text=True,check=True)
         print(result.stdout)
         speak("Scan complete. chack the terminal for results.")
     except subprocess.CalledProcessError as e:
